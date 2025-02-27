@@ -2,5 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "regexManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["test.yaml"],
+      "matchStrings": ["repoURL:\\s*(?<registryUrl>.*?)\\n\\s*chart:\\s*(?<project>.*?)\\n\\s*targetRevision:\\s*\"(?<currentValue>.*?)\""],
+      "datasourceTemplate": "helm",
+      "registryUrlTemplate": "{{#if (containsString registryUrl 'https')}}{{{registryUrl}}}{{else}}https://{{{registryUrl}}}{{/if}}",
+      "depNameTemplate": "{{{project}}}"
+    }
   ]
 }
