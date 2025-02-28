@@ -9,9 +9,7 @@
   "argocd": {
     "fileMatch": [
       ".+\\.yaml"
-    ],
-    "additionalBranchPrefix": "{{packageFileDir}}-",
-    "commitMessageSuffix": "({{packageFileDir}})"
+    ]
   },
   "regexManagers": [
     {
