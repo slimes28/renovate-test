@@ -4,6 +4,8 @@
     "config:recommended"
   ],
   "commitMessagePrefix": "renovate |",
+  "additionalBranchPrefix": "{{packageFileDir}}-",
+  "commitMessageSuffix": "({{packageFileDir}})",
   "regexManagers": [
     {
       "customType": "regex",
