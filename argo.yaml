@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mimir
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: monitoring
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: mimir-distributed
+      targetRevision: "5.4.1"
+      helm:
+        values:
