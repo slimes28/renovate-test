@@ -8,7 +8,7 @@
   "commitMessageSuffix": "({{packageFileDir}})",
   "argocd": {
     "fileMatch": [
-      "cluster-states/.+\\.yaml"
+      ".+\\.yaml"
     ]
   },
   "regexManagers": [
