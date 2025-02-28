@@ -10,7 +10,9 @@
       "matchStrings": ["repoURL:\\s*(?<registryUrl>.*?)\\n\\s*chart:\\s*(?<chart>.*?)\\n\\s*targetRevision:\\s*\"(?<currentValue>.*?)\""],
       "datasourceTemplate": "helm",
       "registryUrlTemplate": "{{#if (containsString registryUrl 'https')}}{{{registryUrl}}}{{else}}https://{{{registryUrl}}}{{/if}}",
-      "depNameTemplate": "{{{chart}}}"
+      "depNameTemplate": "{{{chart}}}",
+      "additionalBranchPrefix": "{{packageFileDir}}-",
+      "commitMessageSuffix": "({{packageFileDir}})"
     }
   ]
 }
