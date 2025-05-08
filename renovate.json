@@ -7,15 +7,19 @@
   "additionalBranchPrefix": "{{packageFileDir}}-",
   "commitMessageSuffix": "({{packageFileDir}})",
   "argocd": {
-    "fileMatch": [
-      ".+\\.yaml"
+    "managerFilePatterns": [
+      "/.+\\.yaml/"
     ]
   },
-  "regexManagers": [
+  "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["common-states/.+/(logmon|monitoring-resources)/.+\\.yaml"],
-      "matchStrings": ["repoURL:\\s*(?<registryUrl>.*?)\\n\\s*chart:\\s*(?<chart>.*?)\\n\\s*targetRevision:\\s*\"(?<currentValue>.*?)\""],
+      "managerFilePatterns": [
+        "/common-states/.+/(logmon|monitoring-resources)/.+\\.yaml/"
+      ],
+      "matchStrings": [
+        "repoURL:\\s*(?<registryUrl>.*?)\\n\\s*chart:\\s*(?<chart>.*?)\\n\\s*targetRevision:\\s*\"(?<currentValue>.*?)\""
+      ],
       "datasourceTemplate": "helm",
       "registryUrlTemplate": "{{#if (containsString registryUrl 'https')}}{{{registryUrl}}}{{else}}https://{{{registryUrl}}}{{/if}}",
       "depNameTemplate": "{{{chart}}}"
