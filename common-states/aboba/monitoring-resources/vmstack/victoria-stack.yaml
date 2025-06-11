@@ -5,5 +5,5 @@ charts:
   victoria-metrics-stack:
     repoURL: https://victoriametrics.github.io/helm-charts
     chart: victoria-metrics-k8s-stack
-    targetRevision: "0.33.2"
+    targetRevision: "0.51.0"
     values:
