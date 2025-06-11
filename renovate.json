@@ -21,5 +21,12 @@
       "registryUrlTemplate": "{{#if (containsString registryUrl 'https')}}{{{registryUrl}}}{{else}}https://{{{registryUrl}}}{{/if}}",
       "depNameTemplate": "{{{chart}}}"
     }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": ["helmv3"],
+      "groupName": "helmv3 dependencies",
+      "groupSlug": "helmv3-dependencies"
+    }
   ]
 }
