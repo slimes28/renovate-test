@@ -1,7 +1,8 @@
 {
   "enabledManagers": [
     "regex",
-    "argocd"
+    "argocd",
+    "helmv3"
   ],
   "commitMessagePrefix": "renovate |",
   "additionalBranchPrefix": "{{packageFileDir}}-",
