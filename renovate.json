@@ -1,4 +1,8 @@
 {
+  "enabledManagers": [
+    "regex",
+    "argocd"
+  ],
   "commitMessagePrefix": "renovate |",
   "additionalBranchPrefix": "{{packageFileDir}}-",
   "commitMessageSuffix": "({{packageFileDir}})",
