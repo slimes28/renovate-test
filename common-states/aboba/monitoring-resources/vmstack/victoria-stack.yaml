@@ -2,9 +2,9 @@ charts:
   alloy:
     repoURL: https://grafana.github.io/helm-charts
     chart: alloy
-    targetRevision: "1.0.3"
+    targetRevision: "1.1.1"
 
   alloy-sts:
     repoURL: https://grafana.github.io/helm-charts
     chart: alloy
-    targetRevision: "1.0.3"
+    targetRevision: "1.1.1"
