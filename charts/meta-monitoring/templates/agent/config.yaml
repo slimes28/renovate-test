@@ -1,0 +1,522 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-configmap
+  namespace: {{ .Release.Namespace }}
+data:
+  config.river: |
+    discovery.kubernetes "pods" {
+      role = "pod"
+      namespaces {
+        own_namespace = true
+        names = [ {{ include "agent.namespaces" . }} ]
+      }
+    }
+
+    discovery.relabel "rename_meta_labels" {
+      targets = discovery.kubernetes.pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+        separator = "/"
+        regex = "(.*)/(.*)/(.*)"
+        replacement = "${1}/${2}-${3}"
+        target_label = "job"
+      }
+      rule {
+        target_label = "cluster"
+        replacement = "{{- .Values.clusterLabelValue -}}"
+      }
+    }
+
+    {{- if or .Values.local.logs.enabled .Values.cloud.logs.enabled }}
+    // Logs
+
+    {{- if .Values.cloud.logs.enabled }}
+    remote.kubernetes.secret "logs_credentials" {
+      namespace = "{{- $.Release.Namespace -}}"
+      name = "{{- .Values.cloud.logs.secret -}}"
+    }
+    {{- end }}
+
+    loki.source.kubernetes "pods" {
+      clustering {
+        enabled = true
+      }
+      targets    = discovery.relabel.rename_meta_labels.output
+      forward_to = [ {{ include "agent.loki_process_targets" . }} ]
+    }
+
+    {{- if or (not (empty .Values.logs.retain)) (not (empty .Values.logs.piiRegexes)) }}
+    loki.process "filter" {
+      forward_to = [ {{ include "agent.loki_write_targets" . }} ]
+
+      {{- if or (not (empty .Values.logs.retain)) (not (empty .Values.logs.extraLogs)) }}
+      stage.match {
+        selector = "{cluster=\"{{- .Values.clusterLabelValue -}}\", namespace=~\"{{- join "|" .Values.namespacesToMonitor -}}|{{- $.Release.Namespace -}}\", pod=~\"loki.*\"} !~ \"{{ include "agent.all_logs" . }}\""
+        action   = "drop"
+      }
+      {{- end }}
+
+      {{- if not (empty .Values.logs.piiRegexes) }}
+      {{- range .Values.logs.piiRegexes }}
+      stage.replace {
+        expression = "{{ .expression }}"
+        source = "{{ .source }}"
+        replace = "{{ .replace }}"
+      }
+      {{- end }}
+      {{- end }}
+    }
+    {{- end }}
+
+    {{- if .Values.logs.metrics }}
+    loki.process "metrics" {
+      forward_to = [ {{ include "agent.loki_write_targets" . }} ]
+
+      stage.json {
+          expressions = {
+            "start_delta" = "start_delta",
+            "total_bytes" = "total_bytes",
+            "component" = "component",
+            "cache_chunk_hit" = "cache_chunk_hit",
+            "cache_chunk_req" = "cache_chunk_req",
+            "cache_chunk_bytes_fetched" = "cache_chunk_bytes_fetched",
+            "cache_chunk_bytes_stored" = "cache_chunk_bytes_stored",
+            "ingester_chunk_compressed_bytes" = "ingester_chunk_compressed_bytes",
+            "ingester_chunk_head_bytes" = "ingester_chunk_head_bytes",
+          }
+      }
+
+      stage.template {
+        source   = "start_delta_s"
+        template = {{ printf "`" }}{{`{{ sub (now | dateModify .start_delta | unixEpoch) (now | unixEpoch) }}`}}{{ printf "`" }}
+      }
+
+      stage.template {
+        source   = "start_delta_h"
+        template = {{ printf "`" }}{{`{{ div .start_delta_s 3600 }}`}}{{ printf "`" }}
+      }
+
+      stage.template {
+        source   = "bucket"
+        template = {{ printf "`" }}{{`{{- if lt (.start_delta_h | int) 3 -}}<3h{{- else if lt (.start_delta_h | int) 12 -}}<12h{{- else if lt (.start_delta_h | int) 24 -}}<1d{{- else if lt (.start_delta_h | int) 48 -}}<2d{{- else if lt (.start_delta_h | int) 72 -}}<3d{{- else if lt (.start_delta_h | int) 96 -}}<4d{{- else if lt (.start_delta_h | int) 120 -}}<5d{{- else if lt (.start_delta_h | int) 168 -}}<1w{{- else if lt (.start_delta_h | int) 336 -}}<2w{{- else if lt (.start_delta_h | int) 720 -}}<1mo{{- else -}}>1mo{{- end -}}`}}{{ printf "`" }}
+      }
+
+      stage.template {
+        source   = "ingester_chunk_compressed_bytes"
+        template = {{ printf "`" }}{{`{{- if hasSuffix "MB" .ingester_chunk_compressed_bytes -}}{{ mul (trimSuffix "MB" .ingester_chunk_compressed_bytes | float64) 1048576 -}}{{- else if hasSuffix "kB" .ingester_chunk_compressed_bytes -}}{{ mul (trimSuffix "kB" .ingester_chunk_compressed_bytes | float64) 1024 -}}{{- else if hasSuffix "B" .ingester_chunk_compressed_bytes -}}{{ trimSuffix "B" .ingester_chunk_compressed_bytes | int -}}{{- else -}}0{{- end -}}`}}{{ printf "`" }}
+      }
+
+      stage.template {
+        source   = "ingester_chunk_head_bytes_parsed"
+        template = {{ printf "`" }}{{`{{- if hasSuffix "MB" .ingester_chunk_head_bytes -}}{{ mul (trimSuffix "MB" .ingester_chunk_head_bytes | float64) 1048576 -}}{{- else if hasSuffix "kB" .ingester_chunk_head_bytes -}}{{ mul (trimSuffix "kB" .ingester_chunk_head_bytes | float64) 1024 -}}{{- else if hasSuffix "B" .ingester_chunk_head_bytes -}}{{ trimSuffix "B" .ingester_chunk_head_bytes | int -}}{{- else -}}0{{- end -}}`}}{{ printf "`" }}
+      }
+
+      stage.labels {
+        values = {
+          start_delta_s = "",
+          component = "",
+          bucket = "",
+        }
+      }
+
+      stage.match {
+        selector = "{component=\"querier\", start_delta_s!=\"0\"}"
+        stage.label_drop {
+            values = [ "start_delta_s"]
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "cache_chunk_hit_over_time"
+              description = "How many chunks were hit in cache distributed by chunk age buckets."
+              prefix      = "loki_"
+              source      = "cache_chunk_hit"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "cache_chunk_req_over_time"
+              description = "How many chunks were requested from cache distributed by chunk age buckets."
+              prefix      = "loki_"
+              source      = "cache_chunk_req"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "cache_chunk_bytes_fetched_over_time"
+              description = "The volume of chunks were fetched from cache distributed by chunk age buckets."
+              prefix      = "loki_"
+              source      = "cache_chunk_bytes_fetched"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "cache_chunk_bytes_stored_over_time"
+              description = "The volume of chunks were retrieved from bucket distributed by chunk age buckets."
+              prefix      = "loki_"
+              source      = "cache_chunk_bytes_stored"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.label_drop {
+            values = [ "bucket" ]
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "total_bytes_fetched"
+              description = "Total size of chunks was fetched from all sources"
+              prefix      = "loki_"
+              source      = "total_bytes_parsed"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "ingester_chunk_compressed_bytes_fetched"
+              description = "Total size of chunks was fetched from ingester"
+              prefix      = "loki_"
+              source      = "ingester_chunk_compressed_bytes"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "ingester_chunk_head_bytes_fetched"
+              description = "Total size of chunks was fetched from ingester"
+              prefix      = "loki_"
+              source      = "ingester_chunk_head_bytes_parsed"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "cache_chunk_bytes_fetched"
+              description = "Total size of chunks was fetched from chunk cache"
+              prefix      = "loki_"
+              source      = "cache_chunk_bytes_fetched"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+
+        stage.metrics {
+          metric.counter {
+              name        = "cache_chunk_bytes_stored"
+              description = "Total size of chunks was fetched from bucket"
+              prefix      = "loki_"
+              source      = "cache_chunk_bytes_stored"
+
+              action            = "add"
+              max_idle_duration = "24h"
+          }
+        }
+      }
+
+      stage.drop {
+          expression  = ".*"
+      }
+    }
+    {{- end }}
+    {{- end }}
+
+    {{- if or .Values.local.metrics.enabled .Values.cloud.metrics.enabled }}
+    // Metrics
+
+    {{- if .Values.cloud.metrics.enabled }}
+    remote.kubernetes.secret "metrics_credentials" {
+      namespace = "{{- $.Release.Namespace -}}"
+      name = "{{- .Values.cloud.metrics.secret -}}"
+    }
+    {{- end }}
+
+    prometheus.operator.servicemonitors "metrics" {
+      forward_to = [ prometheus.relabel.filter.receiver ]
+      namespaces = ["monitoring", "logging", "meta-monitoring"]
+      clustering {
+        enabled = true
+      }
+    }
+
+    discovery.kubernetes "services" {
+      role = "service"
+      selectors {
+        role = "service"
+        label= "app.kubernetes.io/name=vmagent"
+      }
+    }
+
+    discovery.relabel "services" {
+      targets = discovery.kubernetes.services.targets
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        target_label = "cluster"
+        replacement = "{{- .Values.clusterLabelValue -}}"
+      }
+    }
+
+    prometheus.scrape "vmAgent" {
+      clustering {
+        enabled = true
+      }
+      targets    = discovery.relabel.services.output
+      forward_to = [ prometheus.relabel.filter.receiver ]
+    }
+
+    prometheus.relabel "filter" {
+      rule {
+        target_label = "cluster"
+        replacement = "{{- .Values.clusterLabelValue -}}"
+      }
+
+      rule {
+        source_labels = ["__name__"]
+        regex = "({{ include "agent.all_metrics" . }})"
+        action = "keep"
+      }
+
+      rule {
+        source_labels = ["namespace"]
+        regex = "{{ include "agent.all_namespaces_bar" . }}"
+
+        action = "keep"
+      }
+
+      forward_to = [ {{ include "agent.prometheus_write_targets" . }} ]
+    }
+    {{- if .Values.kubeStateMetrics.enabled }}
+
+    prometheus.scrape "kubeStateMetrics" {
+      clustering {
+        enabled = true
+      }
+      targets    = [ { "__address__" = "{{ .Values.kubeStateMetrics.endpoint }}" } ]
+      forward_to = [ prometheus.relabel.filter.receiver ]
+    }
+    {{- end }}
+
+    // cAdvisor and Kubelet metrics
+    // Based on https://github.com/Chewie/loutretelecom-manifests/blob/main/manifests/addons/monitoring/config.river
+    discovery.kubernetes "all_nodes" {
+      role = "node"
+      namespaces {
+        own_namespace = true
+        names = [ {{ include "agent.namespaces" . }} ]
+      }
+    }
+
+    discovery.relabel "all_nodes" {
+      targets = discovery.kubernetes.all_nodes.targets
+      rule {
+        source_labels = ["__meta_kubernetes_node_name"]
+        target_label = "node"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+        separator = "/"
+        regex = "(.*)/(.*)/(.*)"
+        replacement = "${1}/${2}-${3}"
+        target_label = "job"
+      }
+      rule {
+        target_label = "cluster"
+        replacement = "{{- .Values.clusterLabelValue -}}"
+      }
+    }
+
+    prometheus.scrape "cadvisor" {
+      clustering {
+        enabled = true
+      }
+      targets    = discovery.relabel.all_nodes.output
+      forward_to = [ prometheus.relabel.filter.receiver ]
+
+      metrics_path = "/metrics/cadvisor"
+      scheme = "https"
+
+      bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      tls_config {
+        ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+      }
+    }
+
+    prometheus.scrape "kubelet" {
+      clustering {
+        enabled = true
+      }
+      targets    = discovery.relabel.all_nodes.output
+      forward_to = [ prometheus.relabel.filter.receiver ]
+
+      metrics_path = "/metrics"
+      scheme = "https"
+
+      bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      tls_config {
+        ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+      }
+    }
+
+    prometheus.scrape "node_exporter" {
+      clustering {
+        enabled = true
+      }
+      targets    = [ { "__address__" = "victoria-metrics-stack-prometheus-node-exporter.monitoring.svc.cluster.local:9100" } ]
+      forward_to = [ prometheus.relabel.filter.receiver ]
+    }
+    {{- end }}
+
+    {{- if or .Values.local.traces.enabled .Values.cloud.traces.enabled }}
+    // Traces
+
+    {{- if .Values.cloud.traces.enabled }}
+    remote.kubernetes.secret "traces_credentials" {
+      namespace = "{{- $.Release.Namespace -}}"
+      name = "{{- .Values.cloud.traces.secret -}}"
+    }
+    {{- end }}
+
+    // Shamelessly copied from https://github.com/grafana/intro-to-mlt/blob/main/agent/config.river
+    otelcol.receiver.otlp "otlp_receiver" {
+      // We don't technically need this, but it shows how to change listen address and incoming port.
+      // In this case, the Agent is listening on all available bindable addresses on port 4317 (which is the
+      // default OTLP gRPC port) for the OTLP protocol.
+      grpc {}
+
+      // We define where to send the output of all ingested traces. In this case, to the OpenTelemetry batch processor
+      // named 'default'.
+      output {
+        traces = [otelcol.processor.batch.default.input]
+      }
+    }
+
+    otelcol.receiver.jaeger "jaeger" {
+      protocols {
+        thrift_http {}
+      }
+
+      output {
+        traces = [otelcol.processor.batch.default.input]
+      }
+    }
+
+    // The OpenTelemetry batch processor collects trace spans until a batch size or timeout is met, before sending those
+    // spans onto another target. This processor is labeled 'default'.
+    otelcol.processor.batch "default" {
+        // Wait until we've received 16K of data.
+        send_batch_size = 16384
+        // Or until 2 seconds have elapsed.
+        timeout = "2s"
+        // When the Agent has enough batched data, send it to the OpenTelemetry exporter named 'local'.
+        output {
+            traces = [ {{ include "agent.tempo_write_targets" . }} ]
+        }
+    }
+    {{- end }}
+
+    {{- if .Values.local.logs.enabled }}
+    loki.write "local" {
+      endpoint {
+        url = "http://loki-write.{{- .Release.Namespace -}}.svc.cluster.local:3100/loki/api/v1/push"
+      }
+    }
+    {{- end }}
+
+    {{- if .Values.local.metrics.enabled }}
+    prometheus.remote_write "local" {
+      endpoint {
+        url = "http://{{- .Release.Name -}}-mimir-gateway.{{- .Release.Namespace -}}.svc/api/v1/push"
+      }
+    }
+    {{- end }}
+
+    {{- if .Values.local.traces.enabled }}
+    otelcol.exporter.otlphttp "local" {
+        client {
+            endpoint = "http://{{- .Release.Name -}}-tempo-distributor.{{- .Release.Namespace -}}.svc:4318"
+        }
+    }
+    {{- end }}
+
+    {{- if .Values.cloud.logs.enabled }}
+    loki.write "cloud" {
+      endpoint {
+        url = nonsensitive(remote.kubernetes.secret.logs_credentials.data["endpoint"])
+        basic_auth {
+          username = nonsensitive(remote.kubernetes.secret.logs_credentials.data["username"])
+          password = remote.kubernetes.secret.logs_credentials.data["password"]
+        }
+      }
+    }
+    {{- end }}
+
+    {{- if .Values.cloud.metrics.enabled }}
+    prometheus.remote_write "cloud" {
+      endpoint {
+        url = nonsensitive(remote.kubernetes.secret.metrics_credentials.data["endpoint"])
+        basic_auth {
+          username = nonsensitive(remote.kubernetes.secret.metrics_credentials.data["username"])
+          password = remote.kubernetes.secret.metrics_credentials.data["password"]
+        }
+      }
+    }
+    {{- end }}
+
+    {{- if .Values.cloud.traces.enabled }}
+    otelcol.exporter.otlphttp "cloud" {
+        client {
+            endpoint = nonsensitive(remote.kubernetes.secret.traces_credentials.data["endpoint"])
+            auth = otelcol.auth.basic.creds.handler
+        }
+    }
+
+    otelcol.auth.basic "creds" {
+      username = nonsensitive(remote.kubernetes.secret.traces_credentials.data["username"])
+      password = remote.kubernetes.secret.traces_credentials.data["password"]
+    }
+    {{- end }}

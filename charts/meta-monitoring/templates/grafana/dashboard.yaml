@@ -1,0 +1,99 @@
+{{- if and .Values.local.grafana.enabled .Values.dashboards.logs.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboards-provisioning
+  namespace: {{ $.Release.Namespace }}
+data:
+  dashboards.yaml: |
+    ---
+    apiVersion: 1
+    providers:
+{{- if .Values.dashboards.logs.enabled }}
+      - disableDeletion: true
+        editable: false
+        folder: Loki
+        name: loki-1
+        options:
+          path: /var/lib/grafana/dashboards/loki-1
+        orgId: 1
+        type: file
+      - disableDeletion: true
+        editable: false
+        folder: Loki
+        name: loki-2
+        options:
+          path: /var/lib/grafana/dashboards/loki-2
+        orgId: 1
+        type: file
+{{- end }}
+{{- if .Values.dashboards.mimir.enabled }}
+      - disableDeletion: false
+        editable: false
+        folder: Mimir
+        name: mimir-1
+        options:
+          path: /var/lib/grafana/dashboards/mimir-1
+        orgId: 1
+        type: file
+      - disableDeletion: false
+        editable: false
+        folder: Mimir
+        name: mimir-2
+        options:
+          path: /var/lib/grafana/dashboards/mimir-2
+        orgId: 1
+        type: file
+      - disableDeletion: true
+        editable: false
+        folder: Mimir
+        name: mimir-3
+        options:
+          path: /var/lib/grafana/dashboards/mimir-3
+        orgId: 1
+        type: file
+      - disableDeletion: true
+        editable: false
+        folder: Mimir
+        name: mimir-4
+        options:
+          path: /var/lib/grafana/dashboards/mimir-4
+        orgId: 1
+        type: file
+      - disableDeletion: true
+        editable: false
+        folder: Mimir
+        name: mimir-5
+        options:
+          path: /var/lib/grafana/dashboards/mimir-5
+        orgId: 1
+        type: file
+      - disableDeletion: true
+        editable: false
+        folder: Mimir
+        name: mimir-6
+        options:
+          path: /var/lib/grafana/dashboards/mimir-6
+        orgId: 1
+        type: file
+{{- end }}
+{{- if .Values.dashboards.victoriametrics.enabled }}
+      - disableDeletion: true
+        editable: false
+        folder: Victoria Metrics
+        name: victoriametrics
+        options:
+          path: /var/lib/grafana/dashboards/victoriametrics
+        orgId: 1
+        type: file
+{{- end }}
+      - disableDeletion: true
+        editable: false
+        folder: Alloy
+        name: alloy-1
+        options:
+          path: /var/lib/grafana/dashboards/alloy-1
+        orgId: 1
+        type: file
+{{- end }}

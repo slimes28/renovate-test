@@ -1,0 +1,17 @@
+{{- if and .Values.local.grafana.enabled .Values.dashboards.mimir.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-dashboards-2
+  namespace: {{ $.Release.Namespace }}
+data:
+  "mimir-slow-queries.json": |
+    {{ $.Files.Get "src/dashboards/mimir/mimir-slow-queries.json" | fromJson | toJson }}
+  "mimir-writes-resources.json": |
+    {{ $.Files.Get "src/dashboards/mimir/mimir-writes-resources.json" | fromJson | toJson }}
+  "mimir-object-store.json": |
+    {{ $.Files.Get "src/dashboards/mimir/mimir-object-store.json" | fromJson | toJson }}
+  "mimir-overview.json": |
+    {{ $.Files.Get "src/dashboards/mimir/mimir-overview.json" | fromJson | toJson }}
+{{- end }}
