@@ -1,10 +1,179 @@
+project: logging
+namespace: logging
+createNamespace: false
+
 charts:
   alloy:
     repoURL: https://grafana.github.io/helm-charts
     chart: alloy
+    # COMMENT IMPORTANT
     targetRevision: "1.0.3"
+    values:
+      crds:
+        create: false
+      alloy:
+        configMap:
+          create: false
+
+        clustering:
+          enabled: false
+        # TODO: VERY IMPORTANT COMMENT
+        stabilityLevel: "experimental"
+
+        mounts:
+          varlog: true
+          extra:
+            - name: data
+              mountPath: /tmp/alloy
+
+        extraArgs:
+          - --disable-reporting
+
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 12345
+            scheme: HTTP
+          initialDelaySeconds: 30
+          timeoutSeconds: 2
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 3
+
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+
+      controller:
+        type: "daemonset"
+        podAnnotations:
+          linkerd.io/inject: enabled
+        tolerations:
+          - operator: "Exists"
+        volumes:
+          extra:
+            - name: data
+              hostPath:
+                path: /tmp/alloy
+
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          prometheus: main
+        inteval: 1m
+        metricRelabelings:
+          - action: labeldrop
+            regex: instance
+          - action: labeldrop
+            regex: service
+
+      rbac:
+        create: false
+
+      ingress:
+        enabled: true
+        ingressClassName: traefik
+        annotations:
+          traefik.ingress.kubernetes.io/router.middlewares: traefik-azure-ad@kubernetescrd,traefik-security-headers@kubernetescrd
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure-pub
+        faroPort: 12345
 
   alloy-sts:
     repoURL: https://grafana.github.io/helm-charts
     chart: alloy
-    targetRevision: "1.0.3"
+    targetRevision: "1.1.1"
+    values:
+      nameOverride: alloy-sts
+      fullnameOverride: alloy-sts
+      crds:
+        create: false
+      alloy:
+        configMap:
+          create: false
+          name: alloy
+          key: sts-config.alloy
+
+        clustering:
+          enabled: false
+
+        stabilityLevel: "experimental"
+
+        mounts:
+          extra:
+            - name: data
+              mountPath: /tmp/alloy
+
+        extraArgs:
+          - --disable-reporting
+
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 12345
+            scheme: HTTP
+          initialDelaySeconds: 30
+          timeoutSeconds: 2
+          periodSeconds: 30
+          successThreshold: 1
+          failureThreshold: 3
+
+        resources:
+          limits:
+            cpu: 2
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+
+        extraPorts:
+          - name: otlp-grpc
+            port: 4317
+            targetPort: 4317
+            protocol: TCP
+
+      controller:
+        type: "statefulset"
+        replicas: 1
+        podAnnotations:
+          linkerd.io/inject: enabled
+
+        volumeClaimTemplates:
+          - metadata:
+              name: data
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 1Gi
+
+      serviceMonitor:
+        enabled: true
+        additionalLabels:
+          prometheus: main
+        inteval: 1m
+        metricRelabelings:
+          - action: labeldrop
+            regex: instance
+          - action: labeldrop
+            regex: service
+
+      rbac:
+        create: false
+
+      ingress:
+        enabled: true
+        ingressClassName: traefik
+        annotations:
+          traefik.ingress.kubernetes.io/router.middlewares: traefik-azure-ad@kubernetescrd,traefik-security-headers@kubernetescrd
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure-pub
+        faroPort: 12345
+
+  alloy-config:
+    repoURL: git@gitlab.test.com:test/alloy-config.git
+    targetRevision: main
+    path: helm/alloy-config
