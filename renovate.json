@@ -24,9 +24,7 @@
   ],
   "packageRules": [
     {
-      "matchManagers": ["helmv3"],
-      "groupName": "helmv3 dependencies",
-      "groupSlug": "helmv3-dependencies"
+      "matchManagers": ["helmv3"]
     }
   ]
 }
