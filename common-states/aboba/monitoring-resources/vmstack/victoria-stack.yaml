@@ -1,9 +1,10 @@
-project: monitoring
-namespace: monitoring
-createNamespace: false
 charts:
-  victoria-metrics-stack:
-    repoURL: https://victoriametrics.github.io/helm-charts
-    chart: victoria-metrics-k8s-stack
-    targetRevision: "0.33.2"
-    values:
+  alloy:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "1.0.3"
+
+  alloy-sts:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: alloy
+    targetRevision: "1.0.3"
