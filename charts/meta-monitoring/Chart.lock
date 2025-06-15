@@ -1,18 +1,18 @@
 dependencies:
 - name: loki
   repository: https://grafana.github.io/helm-charts
-  version: 6.18.0
+  version: 6.30.1
 - name: alloy
   repository: https://grafana.github.io/helm-charts
-  version: 1.0.3
+  version: 1.1.1
 - name: mimir-distributed
   repository: https://grafana.github.io/helm-charts
-  version: 5.4.1
+  version: 5.7.0
 - name: tempo-distributed
   repository: https://grafana.github.io/helm-charts
-  version: 1.10.0
+  version: 1.42.1
 - name: minio
   repository: https://charts.min.io
-  version: 5.2.0
-digest: sha256:94943e1f3b7092499491e7bcb9d454a9632eeed2025e32fd84aab5e81fb48463
-generated: "2025-06-11T14:40:32.385593136+03:00"
+  version: 5.4.0
+digest: sha256:2ae4b23833b9aebd69e4e7607c8eb8748ad80e16f7f6129a256ac3eb1911a84c
+generated: "2025-06-15T08:05:52.764178983Z"
