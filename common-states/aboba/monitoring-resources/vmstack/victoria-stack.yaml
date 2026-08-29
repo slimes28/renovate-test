@@ -85,7 +85,7 @@ charts:
   alloy-sts:
     repoURL: https://grafana.github.io/helm-charts
     chart: alloy
-    targetRevision: "1.1.1"
+    targetRevision: "1.12.1"
     values:
       nameOverride: alloy-sts
       fullnameOverride: alloy-sts
